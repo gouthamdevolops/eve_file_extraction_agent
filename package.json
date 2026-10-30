@@ -1,0 +1,31 @@
+{
+  "name": "file-extraction-agent",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "eve build",
+    "deploy": "eve deploy",
+    "dev": "eve dev",
+    "start": "eve start",
+    "typecheck": "tsc",
+    "test": "tsc -p tsconfig.test.json && node --test --test-concurrency=1 test/*.test.mjs"
+  },
+  "dependencies": {
+    "@llamaindex/liteparse": "^2.17.0",
+    "@openrouter/ai-sdk-provider": "^3.1.0",
+    "@vercel/connect": "2.5.2",
+    "ai": "^7.0.137",
+    "eve": "^0.84.0",
+    "mssql": "^12.7.13",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/mssql": "^12.3.0",
+    "@types/node": "24.x",
+    "just-bash": "^3.6.0",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": "24.x"
+  }
+}

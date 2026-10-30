@@ -1,0 +1,15 @@
+# Local credentials
+.env
+.env.*
+!.env.example
+
+# User files, outputs, and local runtime data
+data/
+output/
+.output/
+.eve/
+
+# Dependencies and logs
+node_modules/
+.test-dist/
+npm-debug.log*

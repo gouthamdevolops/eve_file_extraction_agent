@@ -1,0 +1,14 @@
+node_modules
+.test-dist
+.output
+.eve
+output
+data
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+Dockerfile*
+docker-compose*.yml
+npm-debug.log*
