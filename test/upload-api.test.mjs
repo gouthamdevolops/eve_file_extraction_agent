@@ -113,6 +113,15 @@ await test("applies count and per-file limits", async () => {
     process.env.UPLOAD_MAX_REQUEST_BYTES = "100";
     const requestTooLarge = await submit([{ name: "payload.pdf", contents: "x".repeat(200) }]);
     assert.equal(requestTooLarge.response.status, 413);
+
+    const chunkedRequest = new Request("http://localhost/api/runs", {
+      method: "POST",
+      headers: { "content-type": "multipart/form-data; boundary=test" },
+      body: new ReadableStream({ pull(controller) { controller.enqueue(new Uint8Array(101)); } }),
+      duplex: "half",
+    });
+    const chunkedTooLarge = await receiveUpload(chunkedRequest, async () => ({}), () => {});
+    assert.equal(chunkedTooLarge.status, 413);
   } finally { await teardown(); }
 });
 

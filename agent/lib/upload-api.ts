@@ -162,9 +162,40 @@ export async function receiveUpload(request: Request, from: ChannelFrom, waitUnt
   }
   if (!request.body) return json({ error: "The request body is empty." }, 400);
 
+  // Enforce the request limit while reading, even when Content-Length is absent
+  // or incorrect. This also bounds memory use before multipart parsing.
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bodyBytes = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bodyBytes += value.byteLength;
+      if (bodyBytes > maxRequestBytes) {
+        return json({ error: `Upload request exceeds the ${maxRequestBytes}-byte request limit.` }, 413);
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return json({ error: "Could not read multipart upload." }, 400);
+  }
+
+  const body = new Uint8Array(bodyBytes);
+  let bodyOffset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, bodyOffset);
+    bodyOffset += chunk.byteLength;
+  }
+
   let form: FormData;
   try {
-    form = await request.formData();
+    const boundedRequest = new Request(request.url, {
+      method: "POST",
+      headers: request.headers,
+      body,
+    });
+    form = await boundedRequest.formData();
   } catch {
     return json({ error: "Could not parse multipart upload." }, 400);
   }
