@@ -12,6 +12,6 @@ Reporting period:
 - Do not mistake unrelated issue, print, or signature dates for the reporting period. Do not infer a period from filenames or unstated context.
 - Email body, subject, and received date are not available.
 
-Identify directly supported values for MSN, aircraft registration, engine serial number, APU serial number, and other component identifiers. Preserve exact spelling, punctuation, and leading zeroes. Include a concise evidence excerpt. Do not guess or validate identifiers.
+Identify directly supported values for MSN, aircraft registration, engine serial number, APU serial number, and other component identifiers. Inspect page headers as well as tables. If an MSN appears in a header and a separate aircraft-serial field uses a different zero-padding format, return both exact values with separate evidence; do not normalize or discard either. Preserve exact spelling, punctuation, and leading zeroes. Include a concise evidence excerpt. Do not guess or validate identifiers.
 
 Do not extract TSN, CSN, hours, cycles, derate, or other utilization values. Do not infer facts from the filename. The caller enforces the structured response schema.
