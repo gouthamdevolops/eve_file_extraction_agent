@@ -11,5 +11,7 @@ output/
 
 # Dependencies and logs
 node_modules/
+.next/
+*.tsbuildinfo
 .test-dist/
 npm-debug.log*

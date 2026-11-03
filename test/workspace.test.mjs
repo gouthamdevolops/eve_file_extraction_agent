@@ -148,6 +148,30 @@ await test("starts workspace processing once and returns completed job status", 
   }
 });
 
+await test("preserves a sanitized workflow failure reason for the workspace UI", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "eve-workspace-"));
+  const previousDataDir = process.env.DATA_DIR;
+  process.env.DATA_DIR = root;
+  try {
+    const workspace = await createWorkspace();
+    const form = new FormData();
+    form.append("file", new File(["%PDF-1.4 test"], "sample.pdf", { type: "application/pdf" }));
+    await uploadWorkspaceFile(new Request("http://localhost/uploads", { method: "POST", body: form }), workspace.sessionId);
+    const tasks = [];
+    const from = () => ({ send: async () => { throw new Error("Parser failed for /tmp/private.pdf token=abc123"); } });
+    await startWorkspaceProcess(workspace.sessionId, from, (task) => tasks.push(task));
+    await Promise.all(tasks);
+    const response = await getWorkspaceStatus(workspace.sessionId);
+    const body = await response.json();
+    assert.equal(body.status, "failed");
+    assert.equal(body.error, "Parser failed for [path redacted] token=[redacted]");
+  } finally {
+    if (previousDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previousDataDir;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 await test("marks unfinished workspace jobs failed after restart", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "eve-workspace-"));
   const previousDataDir = process.env.DATA_DIR;

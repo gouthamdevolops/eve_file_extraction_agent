@@ -232,11 +232,22 @@ export async function uploadWorkspaceFile(request: Request, sessionId: string): 
 
 function publicResult(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(publicResult);
+  if (typeof value === "string") {
+    if (/\n\s*at\s+\S+|\b(?:Error|Exception):\s+.*\n\s*at\s+/i.test(value)) return "[details redacted]";
+    return value
+      .replace(/(?:[A-Za-z]:\\|\\\\[^\\\s]+\\[^\\\s]+|\/(?:data|app|home|tmp|Users|var|mnt)\/)[^\s"'<>]*/g, "[path redacted]")
+      .replace(/\b(password|secret|token|api[_-]?key|credential|username)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]");
+  }
   if (!value || typeof value !== "object") return value;
-  const hidden = new Set(["sourcepath", "sourcefile", "textpath", "resultpath", "uploaddirectory", "raw_source_text", "excerpt", "evidence"]);
+  const hidden = new Set([
+    "sourcepath", "sourcepaths", "sourcefile", "textpath", "resultpath", "resultpaths", "uploaddirectory",
+    "rawsourcetext", "documenttext", "fulltext", "markdown", "excerpt", "evidence", "stack", "stacktrace",
+  ]);
   return Object.fromEntries(Object.entries(value).flatMap(([key, item]) => {
-    const normalized = key.toLowerCase();
-    return hidden.has(normalized) || normalized.endsWith("path") ? [] : [[key, publicResult(item)]];
+    const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const sensitive = hidden.has(normalized) || normalized.endsWith("path") || normalized.endsWith("paths") ||
+      /(password|secret|token|credential|apikey|username)/.test(normalized);
+    return sensitive ? [] : [[key, publicResult(item)]];
   }));
 }
 
@@ -264,6 +275,13 @@ export async function getWorkspaceStatus(sessionId: string): Promise<Response> {
   });
 }
 
+function safeWorkflowFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : typeof error === "string" ? error : "Workflow processing failed.";
+  if (/\n\s*at\s+\S+|\b(?:Error|Exception):\s+.*\n\s*at\s+/i.test(message)) return "Workflow failed; diagnostic details were redacted.";
+  const safe = publicResult(message);
+  return typeof safe === "string" && safe.trim() ? safe.slice(0, 1000) : "Workflow processing failed.";
+}
+
 async function runWorkspace(sessionId: string, from: ChannelFrom): Promise<void> {
   const metadata = await getWorkspace(sessionId);
   if (!metadata || metadata.status !== "queued") return;
@@ -283,7 +301,7 @@ async function runWorkspace(sessionId: string, from: ChannelFrom): Promise<void>
   } catch (error) {
     const type = error instanceof Error ? error.name : "UnknownError";
     console.error(`[workspace] Workflow failed for ${sessionId} (${type}).`);
-    await updateWorkspace(sessionId, { status: "failed", error: "Workflow processing failed." });
+    await updateWorkspace(sessionId, { status: "failed", error: safeWorkflowFailure(error) });
   } finally {
     activeWorkspaces.delete(sessionId);
   }
