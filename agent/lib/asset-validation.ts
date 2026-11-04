@@ -1,5 +1,6 @@
 import sql from "mssql";
 import { withMssqlConnection } from "./mssql.js";
+import { sameMsn } from "./asset-identity.js";
 
 export type AssetIdentifier = {
   type: "msn" | "registration" | "engine_serial_number" | "apu_serial_number" | "landing_gear_nose_serial_number" | "landing_gear_left_serial_number" | "landing_gear_right_serial_number" | "other_component_identifier";
@@ -135,7 +136,7 @@ export async function validateAssetIdentities(
               registrationNumber: row.registrationNumber ?? project.registrationNumber ?? null,
               trackedComponents: trackedProjectComponents(project),
             });
-          } else if (identifier.type === "msn" && exact(getMsn(row, project), identifier.value)) {
+          } else if (identifier.type === "msn" && sameMsn(getMsn(row, project), identifier.value)) {
             matches.push({
               assetType: "aircraft",
               databaseId: row.id,

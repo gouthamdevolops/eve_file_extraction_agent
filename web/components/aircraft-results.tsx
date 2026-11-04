@@ -24,7 +24,7 @@ function Measured({ value, raw }: { value: number | null; raw: string | null }) 
 }
 
 function ComponentDetail({ view, family }: { view: ComponentView; family: AircraftView["family"] }) {
-  const hasData = view.health === "extracted" || view.health === "low-confidence";
+  const hasData = view.hasValues;
   return (
     <section className="component-detail" aria-live="polite" aria-labelledby="component-detail-heading">
       <div className="detail-head">
@@ -49,7 +49,8 @@ function ComponentDetail({ view, family }: { view: ComponentView; family: Aircra
           {view.confidence !== null && <><dt>Extraction confidence</dt><dd className="detail-meter"><Meter value={view.confidence * 100} label="Extraction confidence" />{Math.round(view.confidence * 100)}%</dd></>}
         </>}
       </dl>
-      {view.reason && <p className={`detail-reason ${hasData ? "" : "warn"}`}>{view.reason}</p>}
+      {view.health === "excluded" && hasData && <p className="detail-reason warn">These values come from the document, but the serial did not match a tracked database record for this period. Verify before relying on them.</p>}
+      {view.reason && <p className={`detail-reason ${view.health === "extracted" || view.health === "low-confidence" ? "" : "warn"}`}>{view.reason}</p>}
       {view.health === "low-confidence" && <p className="detail-reason warn">Confidence is below {Math.round(LOW_CONFIDENCE * 100)}%. Check these values against the source document before relying on them.</p>}
     </section>
   );
@@ -85,7 +86,7 @@ export default function AircraftResults({ aircraft }: { aircraft: AircraftView[]
         <div><dt>MSN</dt><dd>{current.msn?.value ?? "—"}{current.msn?.tracked && <span className="tracked" title="Matched a tracked database record">✓</span>}</dd></div>
         <div><dt>Type</dt><dd>{current.aircraftType ?? "Not stated"}<small>{FAMILY_LABELS[current.family]}</small></dd></div>
         <div><dt>Reporting period</dt><dd>{current.reportingPeriod ?? "—"}</dd></div>
-        <div><dt>Components</dt><dd>{extractedCount} / {COMPONENT_SLOTS.length}<small>with extracted data</small></dd></div>
+        <div><dt>Components</dt><dd>{extractedCount} / {COMPONENT_SLOTS.length}<small>validated with data</small></dd></div>
       </dl>
 
       <ul className="summary-tiles" aria-label="Aircraft utilisation summary">

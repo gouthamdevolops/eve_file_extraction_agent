@@ -42,10 +42,10 @@ Source: `extractionResults[]` in `pipeline-results.json` (see `agent/tools/proce
 |---|---|---|
 | Extracted | Serial validated against the DB **and** `available` **and** confidence ≥ 60% | Green |
 | Low confidence | As above with confidence < 60%; detail card warns to verify against source | Amber |
-| Not validated | Serial found in the document but no tracked DB match; values withheld | Red, dashed |
-| Not found | No serial in the document | Grey, dashed |
+| Not validated | Serial or values found in the document but no tracked DB match | Red, dashed |
+| Not found | No serial and no values in the document | Grey, dashed |
 
-Values from unvalidated components are never displayed.
+The pipeline returns every source-supported value and uses the database match only to annotate it. Values for unvalidated components are therefore shown, with the red status and a warning to verify them before use.
 
 ### R4 — Aircraft summary
 - Heading = registration (fallback MSN). Identity strip: registration ✓tracked, MSN ✓tracked, type + family, reporting period, components with data (n / 7).

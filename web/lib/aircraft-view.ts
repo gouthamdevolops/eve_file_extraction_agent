@@ -56,6 +56,8 @@ export interface ComponentView {
   serialNumber: string | null;
   validation: "validated" | "excluded" | "unknown";
   reason: string | null;
+  /** True when the document supplied values, whether or not the serial matched the database. */
+  hasValues: boolean;
   tsn: number | null;
   csn: number | null;
   monthlyHours: number | null;
@@ -133,10 +135,12 @@ function num(value: unknown): number | null {
 
 function componentView(slot: ComponentSlot, data: Json | null, validation: Json | null, summary: Json | null): ComponentView {
   const validated = validation?.status === "validated";
-  const available = data?.available === true && validated;
+  // The pipeline returns every source-supported value; the database match only annotates it.
+  const available = data?.available === true;
   const confidence = num(data?.extraction_confidence);
-  const health: ComponentHealth = !validation || validation.status === "excluded"
-    ? (text(validation?.serialNumber) ? "excluded" : "not-found")
+  const serialNumber = text(validation?.serialNumber) ?? text(data?.SerialNumber);
+  const health: ComponentHealth = !validated
+    ? (serialNumber || available ? "excluded" : "not-found")
     : !available
       ? "not-found"
       : confidence !== null && confidence < LOW_CONFIDENCE ? "low-confidence" : "extracted";
@@ -144,10 +148,10 @@ function componentView(slot: ComponentSlot, data: Json | null, validation: Json 
     slot,
     label: COMPONENT_LABELS[slot],
     health,
-    serialNumber: text(validation?.serialNumber) ?? (available ? text(data?.SerialNumber) : null),
-    validation: validation?.status === "validated" ? "validated" : validation?.status === "excluded" ? "excluded" : "unknown",
+    hasValues: available,
+    serialNumber,
+    validation: validated ? "validated" : validation?.status === "excluded" ? "excluded" : "unknown",
     reason: text(validation?.reason) ?? text(summary?.reason),
-    // Values are only trustworthy when the serial was validated against the database.
     tsn: available ? num(data?.TSN) : null,
     csn: available ? num(data?.CSN) : null,
     monthlyHours: available ? num(data?.MonthlyUtil_Hrs) : null,

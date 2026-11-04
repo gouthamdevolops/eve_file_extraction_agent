@@ -243,7 +243,8 @@ export default function AircraftSilhouette({ family, components, selected, onSel
             <span className={`health-pill health-${tip.health}`}>{healthLabel(tip.health)}</span>
           </div>
           <p className="tooltip-serial">S/N <code>{tip.serialNumber ?? "not identified"}</code></p>
-          {tip.health === "extracted" || tip.health === "low-confidence" ? (
+          {tip.health === "excluded" && <p className="tooltip-reason">Serial not matched to a tracked database record.</p>}
+          {tip.hasValues ? (
             <dl className="tooltip-grid">
               <dt>TSN</dt><dd>{formatNumber(tip.tsn)}</dd>
               <dt>CSN</dt><dd>{formatNumber(tip.csn)}</dd>
@@ -252,7 +253,7 @@ export default function AircraftSilhouette({ family, components, selected, onSel
               {tip.derate && <><dt>Derate</dt><dd>{tip.derate}</dd></>}
               {tip.confidence !== null && <><dt>Confidence</dt><dd>{Math.round(tip.confidence * 100)}%</dd></>}
             </dl>
-          ) : <p className="tooltip-reason">{tip.reason ?? "No data was extracted for this component."}</p>}
+          ) : tip.health !== "excluded" && <p className="tooltip-reason">{tip.reason ?? "No data was extracted for this component."}</p>}
           <p className="tooltip-hint">Click for full details</p>
         </div>
       )}

@@ -42,6 +42,14 @@ describe("buildAircraftViews", () => {
     expect(view.components.LandingGearNose.health).toBe("not-found");
   });
 
+  it("keeps document values for components whose serial was not validated", () => {
+    const gear = view.components.LandingGearRight;
+    expect(gear.health).toBe("excluded");
+    expect(gear.hasValues).toBe(true);
+    expect(gear.tsn).toBe(11800);
+    expect(gear.serialNumber).toBe("MLG-R-9999");
+  });
+
   it("never carries source paths or raw excerpts into the view", () => {
     const serialized = JSON.stringify(view);
     expect(serialized).not.toContain("/data/");
