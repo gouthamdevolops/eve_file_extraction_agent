@@ -35,7 +35,7 @@ function fileType(name: string): string {
   if ([".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"].includes(extension)) return "Image";
   return extension ? `${extension.slice(1).toUpperCase()} file` : "File";
 }
-
+// here im checking the supported file extensions.
 function fileErrors(file: File): string[] {
   const errors: string[] = [];
   const extension = basename(file.name).match(/\.[^.]+$/)?.[0].toLowerCase() ?? "";
@@ -102,7 +102,7 @@ export default function UploadWorkspace() {
     if (filesInput.current) filesInput.current.value = "";
     if (folderInput.current) folderInput.current.value = "";
   }
-
+// here we are calling the workspaceApi.create() to create a new waorkspace session.
   async function uploadSelection() {
     if (!validSelection || busy) return;
     setUploadState("uploading");
