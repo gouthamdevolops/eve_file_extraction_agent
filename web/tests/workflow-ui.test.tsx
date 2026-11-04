@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import UploadWorkspace from "@/components/upload-workspace";
 import WorkspaceMonitor from "@/components/workspace-monitor";
@@ -155,7 +155,8 @@ describe("workspace workflow monitor", () => {
     expect(screen.getByText("skip.pdf")).toBeTruthy();
     expect(screen.getByText("Reporting period did not match.")).toBeTruthy();
     expect(screen.getByText("Total monthly hours")).toBeTruthy();
-    expect(screen.getByText("12.5")).toBeTruthy();
+    expect(within(view.container.querySelector<HTMLElement>(".extracted-fields")!).getByText("12.5")).toBeTruthy();
+    expect(within(view.container.querySelector<HTMLElement>(".aircraft-results")!).getByText("12.5")).toBeTruthy();
     expect(screen.getAllByText("Engine 1").length).toBeGreaterThanOrEqual(2);
     expect(view.container.querySelectorAll(".component-card")).toHaveLength(7);
     expect(screen.getByRole("region", { name: "Scrollable component results for ok.pdf" })).toBeTruthy();

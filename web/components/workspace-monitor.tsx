@@ -4,30 +4,14 @@ import { useCallback, useEffect, useRef, useState, type UIEvent } from "react";
 import { useRouter } from "next/navigation";
 import { workspaceApi, WorkspaceApiError, type WorkspaceStatus } from "@/lib/workspace-api";
 import WorkflowStatePreview from "@/components/workflow-state-preview";
+import AircraftResults from "@/components/aircraft-results";
+import { buildAircraftViews } from "@/lib/aircraft-view";
 import { rememberRecentWorkspace } from "@/lib/recent-workspace";
+import { sanitizeResult, sanitizeText } from "@/lib/sanitize";
 
 const POLL_INTERVAL_MS = 2500;
 const START_TIMEOUT_MS = 15000;
 type ConnectionState = "connecting" | "connected" | "error";
-
-function sanitizeText(value: string): string {
-  if (/\n\s*at\s+\S+|\b(?:Error|Exception):\s+.*\n\s*at\s+/i.test(value)) return "[details redacted]";
-  return value
-    .replace(/(?:[A-Za-z]:\\|\\\\[^\\\s]+\\[^\\\s]+|\/(?:data|app|home|tmp|Users|var|mnt)\/)[^\s"'<>]*/g, "[path redacted]")
-    .replace(/\b(password|secret|token|api[_-]?key|credential)\s*[:=]\s*[^\s,;]+/gi, "$1=[redacted]");
-}
-
-function sanitizeResult(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sanitizeResult);
-  if (typeof value === "string") return sanitizeText(value);
-  if (!value || typeof value !== "object") return value;
-  const hidden = new Set(["sourcepath", "sourcepaths", "sourcefile", "textpath", "resultpath", "resultpaths", "uploaddirectory", "rawsourcetext", "documenttext", "fulltext", "markdown", "excerpt", "evidence", "stack", "stacktrace"]);
-  return Object.fromEntries(Object.entries(value).flatMap(([key, item]) => {
-    const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (hidden.has(normalized) || normalized.endsWith("path") || normalized.endsWith("paths") || /(password|secret|token|credential|apikey|username)/.test(normalized)) return [];
-    return [[key, sanitizeResult(item)]];
-  }));
-}
 
 function extractionOutcomes(result: unknown): Array<Record<string, unknown>> {
   if (!result || typeof result !== "object" || !("extractionResults" in result)) return [];
@@ -262,6 +246,7 @@ export default function WorkspaceMonitor({ sessionId }: { sessionId: string }) {
   const reportingPeriod = typeof reportingPeriodResult?.value === "string" ? sanitizeText(reportingPeriodResult.value) : "Not confirmed";
   const extractedDataCount = outcomes.filter((item) => item.status === "completed" && item.data !== null && item.data !== undefined).length;
   const sanitizedResult = sanitizeResult(workspace?.result ?? null);
+  const aircraft = status === "completed" ? buildAircraftViews(workspace?.result) : [];
   const statusText = status === "queued" ? "Workflow queued"
     : status === "running" ? "Workflow running"
     : status === "completed" ? "Workflow finished"
@@ -310,6 +295,7 @@ export default function WorkspaceMonitor({ sessionId }: { sessionId: string }) {
             <div><span>Components validated / excluded</span><strong>{validatedComponentCount} / {excludedComponentCount}</strong></div>
           </div>
           {extractedDataCount === 0 && <p className="no-data" role="status">No documents were successfully extracted. Check the document outcomes and reasons below.</p>}
+          {aircraft.length > 0 && <AircraftResults aircraft={aircraft} />}
           {outcomes.length > 0 ? (
             <div className="document-results">
               {outcomes.map((item, index) => {
