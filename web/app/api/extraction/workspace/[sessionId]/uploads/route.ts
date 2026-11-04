@@ -10,3 +10,9 @@ export async function POST(request: Request, { params }: Context): Promise<Respo
   if (!validSessionId(sessionId)) return safeError("Invalid workspace session ID.", 400);
   return proxyWorkspace(request, `/workspace/${sessionId}/uploads`);
 }
+
+export async function DELETE(request: Request, { params }: Context): Promise<Response> {
+  const { sessionId } = await params;
+  if (!validSessionId(sessionId)) return safeError("Invalid workspace session ID.", 400);
+  return proxyWorkspace(request, `/workspace/${sessionId}/uploads${new URL(request.url).search}`);
+}

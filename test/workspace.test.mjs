@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -7,10 +7,28 @@ import {
   createWorkspace,
   createWorkspaceResponse,
   getWorkspaceStatus,
+  listWorkspaces,
   startWorkspaceProcess,
   updateWorkspace,
   uploadWorkspaceFile,
 } from "../.test-dist/agent/lib/workspace.js";
+
+const historyFixture = JSON.parse(await readFile(new URL("./fixtures/workspace-history.json", import.meta.url), "utf8"));
+
+async function seedHistoryRecords(root, records = historyFixture.records) {
+  const workspaceRoot = path.join(root, "workspaces");
+  await mkdir(workspaceRoot, { recursive: true });
+  for (const { metadata } of records) {
+    const directory = path.join(workspaceRoot, metadata.sessionId);
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, "workspace.json"), JSON.stringify(metadata, null, 2));
+  }
+  return workspaceRoot;
+}
+
+async function collectionRequest(query = "") {
+  return listWorkspaces(new Request(`http://localhost/workspace${query}`));
+}
 
 await test("creates a persistent workspace and returns its session ID", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "eve-workspace-"));
@@ -183,6 +201,201 @@ await test("marks unfinished workspace jobs failed after restart", async () => {
     const body = await response.json();
     assert.equal(body.status, "failed");
     assert.equal(body.error, "Workflow was interrupted by an application restart.");
+  } finally {
+    if (previousDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previousDataDir;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+await test("uses the selected batch period for mixed and all-skipped results and keeps ambiguous periods unknown", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "eve-history-"));
+  const previousDataDir = process.env.DATA_DIR;
+  process.env.DATA_DIR = root;
+  try {
+    const allSkipped = structuredClone(historyFixture.edgeCases.allSkippedKnownBatch);
+    allSkipped.reportingPeriod = "July 2026";
+    const mixed = historyFixture.edgeCases.mixedPeriodBatch;
+    const ambiguous = historyFixture.edgeCases.ambiguousBatch;
+    const records = [
+      { metadata: allSkipped },
+      { metadata: mixed },
+      { metadata: ambiguous },
+    ];
+    await seedHistoryRecords(root, records);
+    const body = await (await collectionRequest()).json();
+    const byId = new Map(body.workspaces.map((workspace) => [workspace.sessionId, workspace]));
+    assert.equal(body.total, 3);
+    assert.deepEqual(byId.get(allSkipped.sessionId), allSkipped.expectedSummary);
+    assert.deepEqual(byId.get(mixed.sessionId), mixed.expectedSummary);
+    assert.equal(byId.get(ambiguous.sessionId).reportingYear, null);
+    assert.equal(byId.get(ambiguous.sessionId).reportingMonth, null);
+    assert.equal((await (await collectionRequest("?year=2026&month=5")).json()).total, 1);
+    assert.equal((await (await collectionRequest("?year=2026&month=8")).json()).total, 1);
+  } finally {
+    if (previousDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previousDataDir;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+await test("lists workspace summaries by actual result reporting period without writes or sensitive data", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "eve-history-"));
+  const previousDataDir = process.env.DATA_DIR;
+  process.env.DATA_DIR = root;
+  try {
+    const workspaceRoot = await seedHistoryRecords(root);
+    const aPath = path.join(workspaceRoot, historyFixture.records[0].metadata.sessionId, "workspace.json");
+    const aMetadata = JSON.parse(await readFile(aPath, "utf8"));
+    aMetadata.workflowSessionId = "private-workflow-session";
+    aMetadata.error = "private failure /secret/private.pdf";
+    aMetadata.result.privatePath = "/secret/private-result.json";
+    await writeFile(aPath, JSON.stringify(aMetadata, null, 2));
+    const metadataPaths = historyFixture.records.map(({ metadata }) => path.join(workspaceRoot, metadata.sessionId, "workspace.json"));
+    const before = await Promise.all(metadataPaths.map((filePath) => readFile(filePath)));
+
+    const unfilteredResponse = await collectionRequest();
+    assert.equal(unfilteredResponse.status, 200);
+    assert.equal(unfilteredResponse.headers.get("cache-control"), "no-store");
+    const unfiltered = await unfilteredResponse.json();
+    assert.deepEqual(unfiltered, historyFixture.responses.unfiltered);
+    assert.equal(new Set(unfiltered.workspaces.map((workspace) => workspace.sessionId)).size, 6);
+
+    const augustResponse = await collectionRequest("?year=2026&month=8");
+    const august = await augustResponse.json();
+    assert.equal(august.total, 2);
+    assert.deepEqual(august.workspaces.map((workspace) => workspace.sessionId), historyFixture.responses.august2026.workspaces.map((workspace) => workspace.sessionId));
+    assert.equal(august.workspaces.some((workspace) => workspace.sessionId === historyFixture.records[0].metadata.sessionId), true);
+    assert.equal(august.workspaces.some((workspace) => workspace.sessionId === historyFixture.records[1].metadata.sessionId), true);
+    assert.deepEqual((await (await collectionRequest("?year=2026")).json()), historyFixture.responses.year2026);
+    assert.deepEqual((await (await collectionRequest("?month=8")).json()), historyFixture.responses.month8);
+    assert.deepEqual((await (await collectionRequest("?year=2025&month=8")).json()).workspaces.map((workspace) => workspace.sessionId), [historyFixture.records[3].metadata.sessionId]);
+    assert.deepEqual((await (await collectionRequest("?year=2026&month=9")).json()).workspaces.map((workspace) => workspace.sessionId), [historyFixture.records[2].metadata.sessionId]);
+
+    const serialized = JSON.stringify(unfiltered);
+    for (const privateValue of ["synthetic-a.pdf", "private-workflow-session", "private failure", "/secret/private-result.json", "resultPaths"]) {
+      assert.equal(serialized.includes(privateValue), false, `response leaked ${privateValue}`);
+    }
+    await collectionRequest();
+    const after = await Promise.all(metadataPaths.map((filePath) => readFile(filePath)));
+    for (let index = 0; index < before.length; index += 1) assert.deepEqual(after[index], before[index]);
+  } finally {
+    if (previousDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previousDataDir;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+await test("rejects malformed, repeated, out-of-range, and unsupported collection filters", async () => {
+  const invalidQueries = [
+    "?year=", "?year=1899", "?year=2201", "?year=26", "?year=20260",
+    "?month=", "?month=0", "?month=13", "?month=2026-08", "?month=1.5",
+    "?year=2026&year=2025", "?month=8&month=9", "?status=completed", "?year=2026&status=completed",
+  ];
+  for (const query of invalidQueries) {
+    const response = await collectionRequest(query);
+    assert.equal(response.status, 400, `expected 400 for ${query}`);
+    assert.deepEqual(await response.json(), { error: "Invalid workspace collection query." });
+  }
+});
+
+await test("returns empty history for a missing store and a safe error for store access failure", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "eve-history-"));
+  const previousDataDir = process.env.DATA_DIR;
+  try {
+    process.env.DATA_DIR = path.join(root, "not-created");
+    const missing = await collectionRequest();
+    assert.equal(missing.status, 200);
+    assert.deepEqual(await missing.json(), { total: 0, workspaces: [] });
+
+    process.env.DATA_DIR = root;
+    await writeFile(path.join(root, "workspaces"), "not a directory");
+    const inaccessible = await collectionRequest();
+    assert.equal(inaccessible.status, 500);
+    assert.deepEqual(await inaccessible.json(), { error: "Could not read workspace collection." });
+  } finally {
+    if (previousDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previousDataDir;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+await test("skips corrupt records and external symlinks and reports interrupted status without writing", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "eve-history-"));
+  const previousDataDir = process.env.DATA_DIR;
+  process.env.DATA_DIR = root;
+  try {
+    const workspaceRoot = await seedHistoryRecords(root, [historyFixture.records[0]]);
+    const legacy = historyFixture.edgeCases.legacyMissingFields;
+    const legacyDirectory = path.join(workspaceRoot, legacy.sessionId);
+    await mkdir(legacyDirectory, { recursive: true });
+    await writeFile(path.join(legacyDirectory, "workspace.json"), JSON.stringify(legacy));
+
+    const interruptedId = "20000000-0000-4000-8000-000000000007";
+    const interruptedDirectory = path.join(workspaceRoot, interruptedId);
+    await mkdir(interruptedDirectory, { recursive: true });
+    const interruptedMetadata = {
+      sessionId: interruptedId, status: "running", files: ["synthetic-running.pdf"],
+      reportingPeriod: "August 2026", createdAt: "2026-08-01T00:00:00.000Z", updatedAt: "2026-08-01T00:01:00.000Z",
+    };
+    const interruptedPath = path.join(interruptedDirectory, "workspace.json");
+    const interruptedBytes = JSON.stringify(interruptedMetadata, null, 2);
+    await writeFile(interruptedPath, interruptedBytes);
+
+    const corruptId = historyFixture.edgeCases.malformedJson.directoryName;
+    const corruptDirectory = path.join(workspaceRoot, corruptId);
+    await mkdir(corruptDirectory, { recursive: true });
+    await writeFile(path.join(corruptDirectory, "workspace.json"), historyFixture.edgeCases.malformedJson.workspaceJson);
+
+    const externalDirectory = path.join(root, "external-workspace");
+    await mkdir(externalDirectory, { recursive: true });
+    await writeFile(path.join(externalDirectory, "workspace.json"), JSON.stringify({
+      sessionId: historyFixture.edgeCases.externalSymlink.directoryName,
+      status: "completed", files: ["secret-external.pdf"],
+      result: { classification: { reportingPeriod: { value: "August 2026" } }, secret: "external-private-data" },
+    }));
+    const symlinkId = historyFixture.edgeCases.externalSymlink.directoryName;
+    const symlinkPath = path.join(workspaceRoot, symlinkId);
+    await symlink(externalDirectory, symlinkPath, process.platform === "win32" ? "junction" : "dir");
+
+    const response = await collectionRequest();
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.total, 3);
+    assert.equal(body.workspaces.find((workspace) => workspace.sessionId === interruptedId)?.status, "failed");
+    assert.equal(body.workspaces.find((workspace) => workspace.sessionId === legacy.sessionId)?.reportingMonth, null);
+    assert.equal(body.workspaces.some((workspace) => workspace.sessionId === corruptId), false);
+    assert.equal(body.workspaces.some((workspace) => workspace.sessionId === symlinkId), false);
+    assert.equal(JSON.stringify(body).includes("external-private-data"), false);
+    assert.equal(await readFile(interruptedPath, "utf8"), interruptedBytes);
+  } finally {
+    if (previousDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = previousDataDir;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+await test("sorts ties deterministically and returns every matching workspace", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "eve-history-"));
+  const previousDataDir = process.env.DATA_DIR;
+  process.env.DATA_DIR = root;
+  try {
+    const workspaceRoot = path.join(root, "workspaces");
+    await mkdir(workspaceRoot, { recursive: true });
+    const expectedIds = [];
+    for (let value = 1; value <= 105; value += 1) {
+      const sessionId = `30000000-0000-4000-8000-${value.toString(16).padStart(12, "0")}`;
+      expectedIds.push(sessionId);
+      const directory = path.join(workspaceRoot, sessionId);
+      await mkdir(directory);
+      await writeFile(path.join(directory, "workspace.json"), JSON.stringify({
+        sessionId, status: "uploading", files: [], createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
+      }));
+    }
+    const body = await (await collectionRequest()).json();
+    assert.equal(body.total, 105);
+    assert.equal(body.workspaces.length, 105);
+    assert.deepEqual(body.workspaces.map((workspace) => workspace.sessionId), expectedIds);
   } finally {
     if (previousDataDir === undefined) delete process.env.DATA_DIR;
     else process.env.DATA_DIR = previousDataDir;

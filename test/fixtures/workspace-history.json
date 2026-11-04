@@ -1,0 +1,267 @@
+{
+  "description": "Synthetic shared contract fixture for backend and frontend workspace-history stories. All identities and dates are fictional.",
+  "records": [
+    {
+      "label": "A",
+      "metadata": {
+        "sessionId": "10000000-0000-4000-8000-00000000000a",
+        "status": "completed",
+        "files": ["synthetic-a.pdf"],
+        "reportingPeriod": null,
+        "createdAt": "2026-09-10T09:00:00.000Z",
+        "updatedAt": "2026-10-02T12:00:00.000Z",
+        "result": {
+          "classification": { "reportingPeriod": { "value": "August 2026" } },
+          "extractionResults": [{ "sourceName": "synthetic-a.pdf", "status": "completed" }]
+        }
+      },
+      "summary": {
+        "sessionId": "10000000-0000-4000-8000-00000000000a",
+        "status": "completed",
+        "fileCount": 1,
+        "reportingYear": 2026,
+        "reportingMonth": 8,
+        "createdAt": "2026-09-10T09:00:00.000Z",
+        "updatedAt": "2026-10-02T12:00:00.000Z"
+      }
+    },
+    {
+      "label": "B",
+      "metadata": {
+        "sessionId": "10000000-0000-4000-8000-00000000000b",
+        "status": "completed",
+        "files": ["synthetic-b.pdf"],
+        "reportingPeriod": "July 2026",
+        "createdAt": "2026-07-20T09:00:00.000Z",
+        "updatedAt": "2026-08-05T12:00:00.000Z",
+        "result": {
+          "classification": { "reportingPeriod": { "value": "August 2026" } },
+          "extractionResults": [{ "sourceName": "synthetic-b.pdf", "status": "completed" }]
+        }
+      },
+      "summary": {
+        "sessionId": "10000000-0000-4000-8000-00000000000b",
+        "status": "completed",
+        "fileCount": 1,
+        "reportingYear": 2026,
+        "reportingMonth": 8,
+        "createdAt": "2026-07-20T09:00:00.000Z",
+        "updatedAt": "2026-08-05T12:00:00.000Z"
+      }
+    },
+    {
+      "label": "C",
+      "metadata": {
+        "sessionId": "10000000-0000-4000-8000-00000000000c",
+        "status": "completed",
+        "files": ["synthetic-c.pdf"],
+        "reportingPeriod": null,
+        "createdAt": "2026-10-01T09:00:00.000Z",
+        "updatedAt": "2026-10-04T12:00:00.000Z",
+        "result": {
+          "classification": { "reportingPeriod": { "value": "September 2026" } },
+          "extractionResults": [{ "sourceName": "synthetic-c.pdf", "status": "completed" }]
+        }
+      },
+      "summary": {
+        "sessionId": "10000000-0000-4000-8000-00000000000c",
+        "status": "completed",
+        "fileCount": 1,
+        "reportingYear": 2026,
+        "reportingMonth": 9,
+        "createdAt": "2026-10-01T09:00:00.000Z",
+        "updatedAt": "2026-10-04T12:00:00.000Z"
+      }
+    },
+    {
+      "label": "D",
+      "metadata": {
+        "sessionId": "10000000-0000-4000-8000-00000000000d",
+        "status": "completed",
+        "files": ["synthetic-d.pdf"],
+        "reportingPeriod": null,
+        "createdAt": "2025-08-20T09:00:00.000Z",
+        "updatedAt": "2025-08-25T12:00:00.000Z",
+        "result": {
+          "classification": { "reportingPeriod": { "value": "August 2025" } },
+          "extractionResults": [{ "sourceName": "synthetic-d.pdf", "status": "completed" }]
+        }
+      },
+      "summary": {
+        "sessionId": "10000000-0000-4000-8000-00000000000d",
+        "status": "completed",
+        "fileCount": 1,
+        "reportingYear": 2025,
+        "reportingMonth": 8,
+        "createdAt": "2025-08-20T09:00:00.000Z",
+        "updatedAt": "2025-08-25T12:00:00.000Z"
+      }
+    },
+    {
+      "label": "E",
+      "metadata": {
+        "sessionId": "10000000-0000-4000-8000-00000000000e",
+        "status": "uploading",
+        "files": ["synthetic-e.pdf"],
+        "reportingPeriod": null,
+        "createdAt": "2026-10-02T09:00:00.000Z",
+        "updatedAt": "2026-10-02T09:00:00.000Z"
+      },
+      "summary": {
+        "sessionId": "10000000-0000-4000-8000-00000000000e",
+        "status": "uploading",
+        "fileCount": 1,
+        "reportingYear": null,
+        "reportingMonth": null,
+        "createdAt": "2026-10-02T09:00:00.000Z",
+        "updatedAt": "2026-10-02T09:00:00.000Z"
+      }
+    },
+    {
+      "label": "F",
+      "metadata": {
+        "sessionId": "10000000-0000-4000-8000-00000000000f",
+        "status": "failed",
+        "files": ["synthetic-f.pdf"],
+        "reportingPeriod": null,
+        "createdAt": "2026-10-03T09:00:00.000Z",
+        "updatedAt": "2026-10-03T09:30:00.000Z"
+      },
+      "summary": {
+        "sessionId": "10000000-0000-4000-8000-00000000000f",
+        "status": "failed",
+        "fileCount": 1,
+        "reportingYear": null,
+        "reportingMonth": null,
+        "createdAt": "2026-10-03T09:00:00.000Z",
+        "updatedAt": "2026-10-03T09:30:00.000Z"
+      }
+    }
+  ],
+  "responses": {
+    "unfiltered": {
+      "total": 6,
+      "workspaces": [
+        { "sessionId": "10000000-0000-4000-8000-00000000000f", "status": "failed", "fileCount": 1, "reportingYear": null, "reportingMonth": null, "createdAt": "2026-10-03T09:00:00.000Z", "updatedAt": "2026-10-03T09:30:00.000Z" },
+        { "sessionId": "10000000-0000-4000-8000-00000000000e", "status": "uploading", "fileCount": 1, "reportingYear": null, "reportingMonth": null, "createdAt": "2026-10-02T09:00:00.000Z", "updatedAt": "2026-10-02T09:00:00.000Z" },
+        { "sessionId": "10000000-0000-4000-8000-00000000000c", "status": "completed", "fileCount": 1, "reportingYear": 2026, "reportingMonth": 9, "createdAt": "2026-10-01T09:00:00.000Z", "updatedAt": "2026-10-04T12:00:00.000Z" },
+        { "sessionId": "10000000-0000-4000-8000-00000000000a", "status": "completed", "fileCount": 1, "reportingYear": 2026, "reportingMonth": 8, "createdAt": "2026-09-10T09:00:00.000Z", "updatedAt": "2026-10-02T12:00:00.000Z" },
+        { "sessionId": "10000000-0000-4000-8000-00000000000b", "status": "completed", "fileCount": 1, "reportingYear": 2026, "reportingMonth": 8, "createdAt": "2026-07-20T09:00:00.000Z", "updatedAt": "2026-08-05T12:00:00.000Z" },
+        { "sessionId": "10000000-0000-4000-8000-00000000000d", "status": "completed", "fileCount": 1, "reportingYear": 2025, "reportingMonth": 8, "createdAt": "2025-08-20T09:00:00.000Z", "updatedAt": "2025-08-25T12:00:00.000Z" }
+      ]
+    },
+    "year2026": {
+      "total": 3,
+      "workspaces": [
+        { "sessionId": "10000000-0000-4000-8000-00000000000c", "status": "completed", "fileCount": 1, "reportingYear": 2026, "reportingMonth": 9, "createdAt": "2026-10-01T09:00:00.000Z", "updatedAt": "2026-10-04T12:00:00.000Z" },
+        { "sessionId": "10000000-0000-4000-8000-00000000000a", "status": "completed", "fileCount": 1, "reportingYear": 2026, "reportingMonth": 8, "createdAt": "2026-09-10T09:00:00.000Z", "updatedAt": "2026-10-02T12:00:00.000Z" },
+        { "sessionId": "10000000-0000-4000-8000-00000000000b", "status": "completed", "fileCount": 1, "reportingYear": 2026, "reportingMonth": 8, "createdAt": "2026-07-20T09:00:00.000Z", "updatedAt": "2026-08-05T12:00:00.000Z" }
+      ]
+    },
+    "month8": {
+      "total": 3,
+      "workspaces": [
+        { "sessionId": "10000000-0000-4000-8000-00000000000a", "status": "completed", "fileCount": 1, "reportingYear": 2026, "reportingMonth": 8, "createdAt": "2026-09-10T09:00:00.000Z", "updatedAt": "2026-10-02T12:00:00.000Z" },
+        { "sessionId": "10000000-0000-4000-8000-00000000000b", "status": "completed", "fileCount": 1, "reportingYear": 2026, "reportingMonth": 8, "createdAt": "2026-07-20T09:00:00.000Z", "updatedAt": "2026-08-05T12:00:00.000Z" },
+        { "sessionId": "10000000-0000-4000-8000-00000000000d", "status": "completed", "fileCount": 1, "reportingYear": 2025, "reportingMonth": 8, "createdAt": "2025-08-20T09:00:00.000Z", "updatedAt": "2025-08-25T12:00:00.000Z" }
+      ]
+    },
+    "august2026": {
+      "total": 2,
+      "workspaces": [
+        { "sessionId": "10000000-0000-4000-8000-00000000000a", "status": "completed", "fileCount": 1, "reportingYear": 2026, "reportingMonth": 8, "createdAt": "2026-09-10T09:00:00.000Z", "updatedAt": "2026-10-02T12:00:00.000Z" },
+        { "sessionId": "10000000-0000-4000-8000-00000000000b", "status": "completed", "fileCount": 1, "reportingYear": 2026, "reportingMonth": 8, "createdAt": "2026-07-20T09:00:00.000Z", "updatedAt": "2026-08-05T12:00:00.000Z" }
+      ]
+    }
+  },
+  "edgeCases": {
+    "mixedPeriodBatch": {
+      "sessionId": "20000000-0000-4000-8000-000000000006",
+      "status": "completed",
+      "files": ["synthetic-mixed-august.pdf", "synthetic-mixed-july.pdf"],
+      "reportingPeriod": null,
+      "createdAt": "2026-09-01T09:00:00.000Z",
+      "updatedAt": "2026-09-02T12:00:00.000Z",
+      "result": {
+        "classification": { "reportingPeriod": { "value": "August 2026" } },
+        "extractionResults": [
+          { "sourceName": "synthetic-mixed-august.pdf", "status": "completed", "reportingPeriod": "August 2026" },
+          { "sourceName": "synthetic-mixed-july.pdf", "status": "skipped", "reportingPeriod": "July 2026" }
+        ]
+      },
+      "expectedSummary": {
+        "sessionId": "20000000-0000-4000-8000-000000000006",
+        "status": "completed",
+        "fileCount": 2,
+        "reportingYear": 2026,
+        "reportingMonth": 8,
+        "createdAt": "2026-09-01T09:00:00.000Z",
+        "updatedAt": "2026-09-02T12:00:00.000Z"
+      },
+      "note": "The selected batch period is August even though an individual July document was skipped; do not index each result by the skipped document period."
+    },
+    "allSkippedKnownBatch": {
+      "sessionId": "20000000-0000-4000-8000-000000000001",
+      "status": "completed",
+      "files": ["synthetic-all-skipped.pdf"],
+      "reportingPeriod": "May 2026",
+      "createdAt": "2026-06-01T09:00:00.000Z",
+      "updatedAt": "2026-06-02T12:00:00.000Z",
+      "result": {
+        "classification": { "reportingPeriod": { "value": "May 2026" } },
+        "extractionResults": [{ "sourceName": "synthetic-all-skipped.pdf", "status": "skipped", "data": null }]
+      },
+      "expectedSummary": {
+        "sessionId": "20000000-0000-4000-8000-000000000001",
+        "status": "completed",
+        "fileCount": 1,
+        "reportingYear": 2026,
+        "reportingMonth": 5,
+        "createdAt": "2026-06-01T09:00:00.000Z",
+        "updatedAt": "2026-06-02T12:00:00.000Z"
+      },
+      "note": "Known batch period remains May 2026 even though every document was skipped; completed describes workflow state, not successful extraction."
+    },
+    "ambiguousBatch": {
+      "sessionId": "20000000-0000-4000-8000-000000000002",
+      "status": "completed",
+      "files": ["synthetic-ambiguous.pdf"],
+      "reportingPeriod": "July 2026",
+      "createdAt": "2026-08-01T09:00:00.000Z",
+      "updatedAt": "2026-08-02T12:00:00.000Z",
+      "result": { "classification": { "reportingPeriod": { "value": null } } },
+      "expectedReportingYear": null,
+      "expectedReportingMonth": null,
+      "note": "Null or tied/ambiguous selected batch periods are unknown; do not fall back to requested metadata or timestamps."
+    },
+    "legacyMissingFields": {
+      "sessionId": "20000000-0000-4000-8000-000000000003",
+      "status": "completed",
+      "result": { "classification": {} },
+      "expectedSummary": {
+        "sessionId": "20000000-0000-4000-8000-000000000003",
+        "status": "completed",
+        "fileCount": null,
+        "reportingYear": null,
+        "reportingMonth": null,
+        "createdAt": null,
+        "updatedAt": null
+      },
+      "note": "Missing optional legacy metadata is projected as null/unknown without rewriting the stored record."
+    },
+    "malformedJson": {
+      "directoryName": "20000000-0000-4000-8000-000000000004",
+      "workspaceJson": "{ this is not valid JSON",
+      "expected": "Skip this unreadable record and continue listing valid workspaces."
+    },
+    "unrelatedDirectory": {
+      "directoryName": "not-a-workspace",
+      "workspaceJson": null,
+      "expected": "Ignore directories that are not valid workspace records."
+    },
+    "externalSymlink": {
+      "directoryName": "20000000-0000-4000-8000-000000000005",
+      "expected": "Do not follow workspace-directory symlinks outside DATA_DIR/workspaces."
+    }
+  }
+}

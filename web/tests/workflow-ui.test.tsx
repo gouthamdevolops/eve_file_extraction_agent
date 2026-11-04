@@ -154,19 +154,20 @@ describe("workspace workflow monitor", () => {
     expect(view.container.querySelector(".result-overview")?.textContent).toContain("Documents skipped / failed1 / 0");
     expect(screen.getByText("skip.pdf")).toBeTruthy();
     expect(screen.getByText("Reporting period did not match.")).toBeTruthy();
-    expect(screen.getByText("Total monthly hours")).toBeTruthy();
-    expect(within(view.container.querySelector<HTMLElement>(".extracted-fields")!).getByText("12.5")).toBeTruthy();
     expect(within(view.container.querySelector<HTMLElement>(".aircraft-results")!).getByText("12.5")).toBeTruthy();
-    expect(screen.getAllByText("Engine 1").length).toBeGreaterThanOrEqual(2);
-    expect(view.container.querySelectorAll(".component-card")).toHaveLength(7);
-    expect(screen.getByRole("region", { name: "Scrollable component results for ok.pdf" })).toBeTruthy();
-    expect(view.container.querySelector(".component-tone-0")).toBeTruthy();
-    expect(view.container.querySelector(".component-tone-1")).toBeTruthy();
+    expect(view.container.querySelectorAll(".extracted-summary")).toHaveLength(0);
+    expect(view.container.querySelectorAll(".component-card")).toHaveLength(0);
+    expect(view.container.querySelectorAll(".component-table tbody tr")).toHaveLength(7);
+    expect(screen.getByRole("heading", { name: "Skipped and failed documents" })).toBeTruthy();
     expect(screen.queryByText("private source excerpt")).toBeNull();
-    await user.click(screen.getAllByText("View sanitized technical data (JSON)")[0]);
-    const jsonBlock = view.container.querySelector(".result-json pre")?.textContent ?? "";
-    expect(jsonBlock).not.toContain("resultPaths");
-    expect(jsonBlock).not.toContain("private document content");
+    const componentSearch = screen.getByRole("searchbox", { name: "Find a component or serial number" });
+    await user.type(componentSearch, "MSN-123");
+    expect(view.container.querySelectorAll(".component-table tbody tr")).toHaveLength(1);
+    expect(view.container.querySelector(".component-table tbody")?.textContent).toContain("MSN-123");
+    await user.clear(componentSearch);
+    expect(view.container.querySelectorAll(".component-table tbody tr")).toHaveLength(7);
+    expect(screen.queryByText("View sanitized technical data (JSON)")).toBeNull();
+    expect(view.container.querySelector(".result-json")).toBeNull();
   });
 
   it("shows safe workflow failures and reloads by observing status without starting another run", async () => {

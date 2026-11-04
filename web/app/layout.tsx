@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./cinematic-intro.css";
 
 export const metadata: Metadata = {
   title: "Aircraft Document Processing | EVE",
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en" data-theme="grant-thornton"><body>{children}</body></html>;
 }

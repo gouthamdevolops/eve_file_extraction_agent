@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type UIEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { workspaceApi, WorkspaceApiError, type WorkspaceStatus } from "@/lib/workspace-api";
 import WorkflowStatePreview from "@/components/workflow-state-preview";
 import AircraftResults from "@/components/aircraft-results";
 import { buildAircraftViews } from "@/lib/aircraft-view";
 import { rememberRecentWorkspace } from "@/lib/recent-workspace";
-import { sanitizeResult, sanitizeText } from "@/lib/sanitize";
+import { sanitizeText } from "@/lib/sanitize";
 
 const POLL_INTERVAL_MS = 2500;
 const START_TIMEOUT_MS = 15000;
@@ -23,25 +23,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-const componentCards = [
-  { key: "Airframe", label: "Airframe" },
-  { key: "Engine1", label: "Engine 1" },
-  { key: "Engine2", label: "Engine 2" },
-  { key: "APU", label: "APU" },
-  { key: "LandingGearLeft", label: "Left landing gear" },
-  { key: "LandingGearRight", label: "Right landing gear" },
-  { key: "LandingGearNose", label: "Nose landing gear" },
-] as const;
-
-const componentFields = [
-  ["SerialNumber", "Serial number"], ["TSN", "TSN"], ["CSN", "CSN"],
-  ["MonthlyUtil_Hrs", "Monthly utilization · hours"], ["MonthlyUtil_Cyc", "Monthly utilization · cycles"],
-  ["attachment_status", "Attachment status"], ["derate", "Derate"], ["location", "Location"],
-  ["current_aircraft", "Current aircraft"], ["TSN_raw", "TSN · source format"], ["CSN_raw", "CSN · source format"],
-  ["MonthlyUtil_Hrs_raw", "Monthly hours · source format"], ["MonthlyUtil_Cyc_raw", "Monthly cycles · source format"],
-  ["available", "Data available"], ["extraction_confidence", "Extraction confidence"],
-] as const;
-
 function readableLabel(value: string): string {
   const labels: Record<string, string> = {
     total_month_cycles: "Total monthly cycles",
@@ -53,29 +34,16 @@ function readableLabel(value: string): string {
   return labels[value] ?? value.replace(/[_-]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function displayValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "Not available";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "string") return sanitizeText(value);
-  if (typeof value === "number") return String(value);
-  return "Not available";
-}
-
-function displayMetric(value: unknown): string {
-  return typeof value === "number"
-    ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)
-    : displayValue(value);
-}
-
 export default function WorkspaceMonitor({ sessionId }: { sessionId: string }) {
   const router = useRouter();
   const [workspace, setWorkspace] = useState<WorkspaceStatus | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("connecting");
   const [startPending, setStartPending] = useState(false);
+  const [fileActionPending, setFileActionPending] = useState(false);
+  const [fileActionError, setFileActionError] = useState<string | null>(null);
+  const additionalFilesInput = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
-  const [componentSearch, setComponentSearch] = useState("");
-  const [activeComponentIndex, setActiveComponentIndex] = useState<Record<number, number>>({});
   const mounted = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const request = useRef<AbortController | null>(null);
@@ -198,28 +166,33 @@ export default function WorkspaceMonitor({ sessionId }: { sessionId: string }) {
     }
   }
 
-  function navigateToComponent(documentIndex: number, componentKey: string, componentIndex: number) {
-    const rail = document.getElementById(`component-results-${documentIndex}`);
-    const card = document.getElementById(`component-${documentIndex}-${componentKey}`);
-    setActiveComponentIndex((current) => ({ ...current, [documentIndex]: componentIndex }));
-    if (rail && card) {
-      const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-      rail.scrollTo({ top: rail.scrollTop + card.getBoundingClientRect().top - rail.getBoundingClientRect().top, behavior: prefersReducedMotion ? "auto" : "smooth" });
+  async function addWorkspaceFiles(fileList: FileList | null) {
+    if (!fileList?.length || fileActionPending || status !== "uploading") return;
+    setFileActionPending(true);
+    setFileActionError(null);
+    try {
+      for (const file of Array.from(fileList)) await workspaceApi.upload(sessionId, file);
+      await fetchStatus();
+    } catch (cause) {
+      setFileActionError(cause instanceof Error ? cause.message : "Could not add files to this workspace.");
+      await fetchStatus().catch(() => undefined);
+    } finally {
+      setFileActionPending(false);
+      if (additionalFilesInput.current) additionalFilesInput.current.value = "";
     }
   }
 
-  function handleComponentScroll(event: UIEvent<HTMLDivElement>, documentIndex: number) {
-    const rail = event.currentTarget;
-    const cards = Array.from(rail.querySelectorAll<HTMLElement>("[data-component-index]"));
-    const closest = cards.reduce<HTMLElement | null>((best, card) => {
-      if (!best) return card;
-      const currentDistance = Math.abs(card.getBoundingClientRect().top - rail.getBoundingClientRect().top);
-      const bestDistance = Math.abs(best.getBoundingClientRect().top - rail.getBoundingClientRect().top);
-      return currentDistance < bestDistance ? card : best;
-    }, null);
-    if (closest) {
-      const nextIndex = Number(closest.dataset.componentIndex);
-      setActiveComponentIndex((current) => current[documentIndex] === nextIndex ? current : { ...current, [documentIndex]: nextIndex });
+  async function removeWorkspaceFile(filename: string) {
+    if (fileActionPending || status !== "uploading") return;
+    setFileActionPending(true);
+    setFileActionError(null);
+    try {
+      await workspaceApi.removeUpload(sessionId, filename);
+      await fetchStatus();
+    } catch (cause) {
+      setFileActionError(cause instanceof Error ? cause.message : "Could not remove this file.");
+    } finally {
+      setFileActionPending(false);
     }
   }
 
@@ -232,6 +205,7 @@ export default function WorkspaceMonitor({ sessionId }: { sessionId: string }) {
   const status = workspace?.status;
   const safeWorkflowError = workspace?.error ? sanitizeText(workspace.error) : null;
   const outcomes = extractionOutcomes(workspace?.result);
+  const otherOutcomes = outcomes.filter((item) => item.status !== "completed");
   const completedCount = outcomes.filter((item) => item.status === "completed").length;
   const skippedCount = outcomes.filter((item) => item.status === "skipped").length;
   const failedCount = outcomes.filter((item) => item.status === "failed").length;
@@ -245,7 +219,6 @@ export default function WorkspaceMonitor({ sessionId }: { sessionId: string }) {
   const reportingPeriodResult = asRecord(classification?.reportingPeriod);
   const reportingPeriod = typeof reportingPeriodResult?.value === "string" ? sanitizeText(reportingPeriodResult.value) : "Not confirmed";
   const extractedDataCount = outcomes.filter((item) => item.status === "completed" && item.data !== null && item.data !== undefined).length;
-  const sanitizedResult = sanitizeResult(workspace?.result ?? null);
   const aircraft = status === "completed" ? buildAircraftViews(workspace?.result) : [];
   const statusText = status === "queued" ? "Workflow queued"
     : status === "running" ? "Workflow running"
@@ -276,6 +249,19 @@ export default function WorkspaceMonitor({ sessionId }: { sessionId: string }) {
       {missing && <div className="error-message" role="alert"><strong>Workspace unavailable</strong><span>{message}</span><button type="button" className="text-button" onClick={newBatch}>New batch</button></div>}
       {message && connection === "connected" && <p className="status" role="status">{message}</p>}
       {status === "uploading" && connection === "connected" && (
+        <section className="workspace-upload-management" aria-label="Manage workspace files">
+          <div className="workspace-upload-toolbar">
+            <div><h2>Workspace files</h2><p>Add more documents or remove an upload before starting the workflow.</p></div>
+            <label className="workspace-add-files">
+              {fileActionPending ? "Updating files…" : "Add files"}
+              <input ref={additionalFilesInput} type="file" multiple tabIndex={-1} onChange={(event) => void addWorkspaceFiles(event.currentTarget.files)} disabled={fileActionPending || (workspace?.fileCount ?? 0) >= 20} />
+            </label>
+          </div>
+          {fileActionError && <p className="error-message" role="alert">{fileActionError}</p>}
+          {(workspace?.files ?? []).length > 0 && <ul className="workspace-uploaded-files">{workspace?.files?.map((filename) => <li key={filename}><span>{filename}</span><button type="button" onClick={() => void removeWorkspaceFile(filename)} disabled={fileActionPending}>Remove</button></li>)}</ul>}
+        </section>
+      )}
+      {status === "uploading" && connection === "connected" && (
         <div className="actions">
           <button type="button" className="primary-button" onClick={() => void startWorkflow()} disabled={startPending || (workspace?.fileCount ?? 0) < 1}>
             {startPending ? <><span className="button-spinner" aria-hidden="true" />Starting…</> : "Start workflow"}
@@ -296,83 +282,24 @@ export default function WorkspaceMonitor({ sessionId }: { sessionId: string }) {
           </div>
           {extractedDataCount === 0 && <p className="no-data" role="status">No documents were successfully extracted. Check the document outcomes and reasons below.</p>}
           {aircraft.length > 0 && <AircraftResults aircraft={aircraft} />}
-          {outcomes.length > 0 ? (
-            <div className="document-results">
-              {outcomes.map((item, index) => {
-                const statusValue = typeof item.status === "string" ? sanitizeText(item.status) : "unknown";
-                const sourceName = typeof item.sourceName === "string" ? sanitizeText(item.sourceName.replace(/\\/g, "/").split("/").pop() || item.sourceName) : `Document ${index + 1}`;
-                const reason = typeof item.reason === "string" ? sanitizeText(item.reason) : null;
-                const data = asRecord(item.data);
-                const fields = Array.isArray(data?.fields) ? data.fields.map(asRecord).filter((field): field is Record<string, unknown> => field !== null) : [];
-                const components = asRecord(data?.components) ?? {};
-                const validations = Array.isArray(item.componentValidation) ? item.componentValidation.map(asRecord).filter((entry): entry is Record<string, unknown> => entry !== null) : [];
-                const matchingComponents = componentCards.map((component, componentIndex) => ({ component, componentIndex })).filter(({ component }) => {
-                  const componentData = asRecord(components[component.key]);
-                  return `${component.label} ${typeof componentData?.SerialNumber === "string" ? componentData.SerialNumber : ""}`.toLocaleLowerCase().includes(componentSearch.trim().toLocaleLowerCase());
-                });
-                return (
-                  <article className={`document-result document-result-${statusValue}`} key={`${sourceName}-${index}`} style={{ animationDelay: `${Math.min(index, 8) * 55}ms` }}>
-                    <header className="document-result-heading"><div><span className="section-kicker">DOCUMENT {index + 1}</span><h3>{sourceName}</h3></div><span className={`document-result-status result-status-${statusValue}`}>{readableLabel(statusValue)}</span></header>
-                    {(statusValue === "skipped" || statusValue === "failed") && reason && <p className="document-result-reason">{reason}</p>}
-                    {data ? <div className="document-result-body">
-                      <section className="extracted-summary" aria-label={`Summary extraction for ${sourceName}`}>
-                        <h4>Aircraft summary</h4>
-                        {fields.length > 0 ? <dl className="extracted-fields">{fields.map((field, fieldIndex) => {
-                          const name = typeof field.name === "string" ? field.name : `Field ${fieldIndex + 1}`;
-                          const confidence = typeof field.confidence === "number" ? ` · ${field.confidence}% confidence` : "";
-                          return <div className="extracted-field" key={`${name}-${fieldIndex}`}><dt>{readableLabel(name)}</dt><dd>{displayValue(field.value)}<small>{confidence.trim() || " "}</small></dd></div>;
-                        })}</dl> : <p className="empty-result-note">No aircraft summary values were returned for this document.</p>}
-                      </section>
-                      <section className="component-section" aria-label={`Component extraction for ${sourceName}`}>
-                        <div className="component-section-heading"><h4>Component details</h4><span>Card {(activeComponentIndex[index] ?? 0) + 1} of {componentCards.length} · {matchingComponents.length} matching</span></div>
-                        <label className="component-search"><span aria-hidden="true">⌕</span><input type="search" value={componentSearch} onChange={(event) => {
-                          const value = event.target.value;
-                          const query = value.trim().toLocaleLowerCase();
-                          const firstMatch = componentCards.findIndex(({ key, label }) => {
-                            const componentData = asRecord(components[key]);
-                            return `${label} ${typeof componentData?.SerialNumber === "string" ? componentData.SerialNumber : ""}`.toLocaleLowerCase().includes(query);
-                          });
-                          setComponentSearch(value);
-                          if (firstMatch >= 0) setActiveComponentIndex((current) => ({ ...current, [index]: firstMatch }));
-                        }} placeholder="Find a component or serial number…" aria-label={`Find a component or serial number in ${sourceName}`} /></label>
-                        <div className="component-navigation" role="group" aria-label={`Jump to a component in ${sourceName}`}>{matchingComponents.map(({ component, componentIndex }) => <button type="button" key={component.key} aria-pressed={(activeComponentIndex[index] ?? 0) === componentIndex} className={(activeComponentIndex[index] ?? 0) === componentIndex ? "active" : ""} onClick={() => navigateToComponent(index, component.key, componentIndex)}>{component.label}</button>)}</div>
-                        <div id={`component-results-${index}`} className="component-card-grid" role="region" tabIndex={0} onScroll={(event) => handleComponentScroll(event, index)} aria-label={`Scrollable component results for ${sourceName}`}>{matchingComponents.map(({ component, componentIndex }) => {
-                          const componentData = asRecord(components[component.key]);
-                          const validation = validations.find((entry) => entry.component === component.key);
-                          const validationStatus = typeof validation?.status === "string" ? validation.status : componentData?.available === true ? "validated" : "not-reported";
-                          const validationLabel = validationStatus === "not-reported" ? "Not checked" : readableLabel(validationStatus);
-                          const validationReason = typeof validation?.reason === "string" ? sanitizeText(validation.reason) : null;
-                          const metricFields = componentFields.filter(([key]) => ["TSN", "CSN", "MonthlyUtil_Hrs", "MonthlyUtil_Cyc"].includes(key) && componentData && Object.prototype.hasOwnProperty.call(componentData, key));
-                          const serialNumber = componentData?.SerialNumber;
-                          const serialIdentified = typeof serialNumber === "string" && serialNumber.trim() !== "" && serialNumber !== "Not found";
-                          return <article id={`component-${index}-${component.key}`} data-component-index={componentIndex} className={`component-card component-tone-${componentIndex}`} key={component.key}>
-                            <div className="component-card-heading"><h5><svg className="component-plane-icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M24 3.5c-1.8 0-3 1.5-3 3.5v13L5 28.5v4l16-4.7v10.6l-5.8 4.1v2.3L24 42.7l8.8 2.1v-2.3L27 38.4V27.8l16 4.7v-4L27 20V7c0-2-1.2-3.5-3-3.5Z" /></svg>{component.label}</h5><div className="component-status-chips"><span className={`component-validation component-validation-${validationStatus}`}>DB · {validationLabel}</span><span className={`component-data-status ${componentData?.available === true ? "has-extracted-data" : "no-extracted-data"}`}>{componentData?.available === true ? "Values extracted" : serialIdentified ? "Serial identified" : "No values extracted"}</span></div></div>
-                            <div className="component-serial"><span>S/N</span><strong>{displayValue(serialNumber)}</strong></div>
-                            <dl className="component-metrics">{metricFields.map(([key, label]) => {
-                              const rawKey = key === "TSN" ? "TSN_raw" : key === "CSN" ? "CSN_raw" : key === "MonthlyUtil_Hrs" ? "MonthlyUtil_Hrs_raw" : "MonthlyUtil_Cyc_raw";
-                              const rawValue = componentData?.[rawKey];
-                              return <div className="component-metric" key={key}><dt>{label}</dt><dd>{displayMetric(componentData?.[key])}</dd>{typeof rawValue === "string" && rawValue && <small>Source format: {sanitizeText(rawValue)}</small>}</div>;
-                            })}</dl>
-                            <div className="component-card-meta">{["location", "attachment_status", "derate", "current_aircraft"].map((key) => {
-                              const value = componentData?.[key];
-                              if (typeof value !== "string" || !value.trim() || value === "Not found") return null;
-                              const label = componentFields.find(([fieldKey]) => fieldKey === key)?.[1] ?? readableLabel(key);
-                              return <span className={key === "location" ? "component-meta-location" : undefined} key={key}>{key === "location" && <svg className="component-location-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M16 8.5c0 4.2-6 9-6 9s-6-4.8-6-9a6 6 0 1 1 12 0Z" /><circle cx="10" cy="8.5" r="2" /></svg>}<strong>{label}:</strong> {sanitizeText(value)}</span>;
-                            })}<span className="component-availability">Data available: {componentData?.available === true ? "Yes" : "No"}{typeof componentData?.extraction_confidence === "number" ? ` · ${Math.round(componentData.extraction_confidence * 100)}% confidence` : ""}</span></div>
-                            {validationReason && <p className="component-validation-reason">{validationReason}</p>}
-                          </article>;
-                        })}{matchingComponents.length === 0 && <p className="no-component-match">No components match this search.</p>}</div>
-                      </section>
-                    </div> : <p className="empty-result-note">No structured extraction data is available for this document.</p>}
-                  </article>
-                );
-              })}
-            </div>
-          ) : <p className="no-data">No document outcome data was returned.</p>}
-          <details className="result-json">
-            <summary>View sanitized technical data (JSON)</summary>
-            <pre>{JSON.stringify(sanitizedResult, null, 2) ?? "null"}</pre>
-          </details>
+          {otherOutcomes.length > 0 && (
+            <section className="document-outcomes" aria-labelledby="document-outcomes-heading">
+              <div className="document-outcomes-heading"><h3 id="document-outcomes-heading">Skipped and failed documents</h3><span>{otherOutcomes.length} outcome{otherOutcomes.length === 1 ? "" : "s"}</span></div>
+              <div className="document-results">
+                {otherOutcomes.map((item, index) => {
+                  const statusValue = typeof item.status === "string" ? sanitizeText(item.status) : "unknown";
+                  const sourceName = typeof item.sourceName === "string" ? sanitizeText(item.sourceName.replace(/\\/g, "/").split("/").pop() || item.sourceName) : `Document outcome ${index + 1}`;
+                  const reason = typeof item.reason === "string" ? sanitizeText(item.reason) : null;
+                  return (
+                    <article className={`document-result document-result-${statusValue}`} key={`${sourceName}-${index}`}>
+                      <header className="document-result-heading"><div><span className="section-kicker">DOCUMENT OUTCOME {index + 1}</span><h4>{sourceName}</h4></div><span className={`document-result-status result-status-${statusValue}`}>{readableLabel(statusValue)}</span></header>
+                      {reason ? <p className="document-result-reason">{reason}</p> : <p className="document-result-reason">No additional reason was provided.</p>}
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          )}
         </section>
       )}
       {status === "failed" && <div className="error-message" role="alert"><strong>Workflow failed</strong><span>{safeWorkflowError || "The backend did not provide a failure reason."}</span></div>}

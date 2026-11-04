@@ -1,11 +1,28 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { lstat, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ChannelFrom } from "eve/channels";
 import { SUPPORTED_EXTENSIONS } from "./document-preparation.js";
 import { normalizeReportingPeriod } from "./reporting-period.js";
 
 export type WorkspaceStatus = "uploading" | "queued" | "running" | "completed" | "failed";
+export type WorkspaceSummaryStatus = WorkspaceStatus | "unknown";
+
+export interface WorkspaceSummary {
+  sessionId: string;
+  status: WorkspaceSummaryStatus;
+  fileCount: number | null;
+  reportingYear: number | null;
+  reportingMonth: number | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface WorkspaceCollectionResponse {
+  total: number;
+  workspaces: WorkspaceSummary[];
+}
 
 export type WorkspaceMetadata = {
   sessionId: string;
@@ -23,6 +40,10 @@ const DEFAULT_MAX_FILE_BYTES = 25 * 1024 * 1024;
 const DEFAULT_MAX_FILES = 20;
 const DEFAULT_MAX_WORKSPACE_BYTES = 250 * 1024 * 1024;
 const DEFAULT_MAX_REQUEST_BYTES = DEFAULT_MAX_FILE_BYTES + 1024 * 1024;
+const MAX_WORKSPACE_METADATA_BYTES = 16 * 1024 * 1024;
+const WORKSPACE_SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const WORKSPACE_STATUSES = new Set<WorkspaceStatus>(["uploading", "queued", "running", "completed", "failed"]);
+const REPORTING_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const activeWorkspaces = new Set<string>();
 const startingWorkspaces = new Set<string>();
 const workspaceAuth = {
@@ -42,7 +63,7 @@ function dataRoot(): string {
 }
 
 function workspacePath(sessionId: string): string {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
+  if (!WORKSPACE_SESSION_ID.test(sessionId)) {
     throw new Error("Invalid workspace session ID.");
   }
   return path.join(dataRoot(), "workspaces", sessionId);
@@ -55,6 +76,155 @@ async function persistWorkspace(metadata: WorkspaceMetadata): Promise<void> {
   metadata.updatedAt = new Date().toISOString();
   await writeFile(temporary, JSON.stringify(metadata, null, 2), { flag: "wx" });
   await rename(temporary, target);
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function safeTimestamp(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null;
+}
+
+function effectiveWorkspaceStatus(sessionId: string, status: WorkspaceStatus): WorkspaceStatus {
+  return (status === "queued" || status === "running") &&
+    !activeWorkspaces.has(sessionId) && !startingWorkspaces.has(sessionId)
+    ? "failed"
+    : status;
+}
+
+function selectedReportingPeriod(metadata: Record<string, unknown>): { year: number; month: number } | null {
+  if (metadata.status !== "completed") return null;
+  const result = asObject(metadata.result);
+  const classification = asObject(result?.classification);
+  const reportingPeriod = asObject(classification?.reportingPeriod);
+  if (typeof reportingPeriod?.value !== "string") return null;
+  const normalized = normalizeReportingPeriod(reportingPeriod.value);
+  const match = normalized?.match(/^([A-Za-z]+) (\d{4})$/);
+  if (!match) return null;
+  const monthIndex = REPORTING_MONTHS.findIndex((month) => month.toLowerCase() === match[1].toLowerCase());
+  if (monthIndex < 0) return null;
+  return { year: Number(match[2]), month: monthIndex + 1 };
+}
+
+async function readBoundedJson(filePath: string): Promise<unknown | null> {
+  let handle: Awaited<ReturnType<typeof open>> | null = null;
+  try {
+    const linkStatus = await lstat(filePath);
+    if (!linkStatus.isFile() || linkStatus.size > MAX_WORKSPACE_METADATA_BYTES) return null;
+    const noFollow = fsConstants.O_NOFOLLOW ?? 0;
+    handle = await open(filePath, fsConstants.O_RDONLY | noFollow);
+    const fileStatus = await handle.stat();
+    if (!fileStatus.isFile() || fileStatus.size > MAX_WORKSPACE_METADATA_BYTES) return null;
+
+    const chunks: Buffer[] = [];
+    const buffer = Buffer.allocUnsafe(64 * 1024);
+    let bytesReadTotal = 0;
+    while (bytesReadTotal <= MAX_WORKSPACE_METADATA_BYTES) {
+      const length = Math.min(buffer.length, MAX_WORKSPACE_METADATA_BYTES + 1 - bytesReadTotal);
+      const { bytesRead } = await handle.read(buffer, 0, length, null);
+      if (bytesRead === 0) break;
+      bytesReadTotal += bytesRead;
+      if (bytesReadTotal > MAX_WORKSPACE_METADATA_BYTES) return null;
+      chunks.push(Buffer.from(buffer.subarray(0, bytesRead)));
+    }
+    return JSON.parse(Buffer.concat(chunks, bytesReadTotal).toString("utf8")) as unknown;
+  } catch {
+    return null;
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+
+function workspaceSummary(directoryName: string, value: unknown): WorkspaceSummary | null {
+  if (!WORKSPACE_SESSION_ID.test(directoryName)) return null;
+  const metadata = asObject(value);
+  if (!metadata) return null;
+  if (metadata.sessionId !== undefined && metadata.sessionId !== directoryName) return null;
+  if (metadata.sessionId !== undefined && typeof metadata.sessionId !== "string") return null;
+
+  const rawStatus = metadata.status;
+  const recognizedStatus = typeof rawStatus === "string" && WORKSPACE_STATUSES.has(rawStatus as WorkspaceStatus)
+    ? rawStatus as WorkspaceStatus
+    : "unknown";
+  const status = recognizedStatus === "unknown" ? "unknown" : effectiveWorkspaceStatus(directoryName, recognizedStatus);
+  const files = metadata.files;
+  const fileCount = Array.isArray(files) && files.every((file) => typeof file === "string") ? files.length : null;
+  const period = selectedReportingPeriod(metadata);
+  return {
+    sessionId: directoryName,
+    status,
+    fileCount,
+    reportingYear: period?.year ?? null,
+    reportingMonth: period?.month ?? null,
+    createdAt: safeTimestamp(metadata.createdAt),
+    updatedAt: safeTimestamp(metadata.updatedAt),
+  };
+}
+
+function parseCollectionFilter(params: URLSearchParams, key: "year" | "month"): { valid: boolean; value: number | null } {
+  const values = params.getAll(key);
+  if (values.length === 0) return { valid: true, value: null };
+  if (values.length !== 1) return { valid: false, value: null };
+  const raw = values[0];
+  const pattern = key === "year" ? /^\d{4}$/ : /^\d{1,2}$/;
+  if (!pattern.test(raw)) return { valid: false, value: null };
+  const value = Number(raw);
+  const minimum = key === "year" ? 1900 : 1;
+  const maximum = key === "year" ? 2200 : 12;
+  return Number.isInteger(value) && value >= minimum && value <= maximum
+    ? { valid: true, value }
+    : { valid: false, value: null };
+}
+
+function collectionResponse(body: WorkspaceCollectionResponse | { error: string }, status = 200): Response {
+  return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
+}
+
+function errorCode(error: unknown): string | null {
+  return error && typeof error === "object" && "code" in error && typeof error.code === "string" ? error.code : null;
+}
+
+export async function listWorkspaces(request: Request): Promise<Response> {
+  const params = new URL(request.url).searchParams;
+  if ([...params.keys()].some((key) => key !== "year" && key !== "month")) {
+    return collectionResponse({ error: "Invalid workspace collection query." }, 400);
+  }
+  const year = parseCollectionFilter(params, "year");
+  const month = parseCollectionFilter(params, "month");
+  if (!year.valid || !month.valid) return collectionResponse({ error: "Invalid workspace collection query." }, 400);
+
+  let entries;
+  try {
+    entries = await readdir(path.join(dataRoot(), "workspaces"), { withFileTypes: true });
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") return collectionResponse({ total: 0, workspaces: [] });
+    const errorType = error instanceof Error ? error.name : "UnknownError";
+    console.error(`[workspace] Could not read workspace collection (${errorType}).`);
+    return collectionResponse({ error: "Could not read workspace collection." }, 500);
+  }
+
+  const workspaces: WorkspaceSummary[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !WORKSPACE_SESSION_ID.test(entry.name)) continue;
+    const metadata = await readBoundedJson(path.join(dataRoot(), "workspaces", entry.name, "workspace.json"));
+    const summary = workspaceSummary(entry.name, metadata);
+    if (!summary) continue;
+    if (year.value !== null && summary.reportingYear !== year.value) continue;
+    if (month.value !== null && summary.reportingMonth !== month.value) continue;
+    workspaces.push(summary);
+  }
+
+  workspaces.sort((left, right) => {
+    const leftCreated = left.createdAt ? Date.parse(left.createdAt) : Number.NaN;
+    const rightCreated = right.createdAt ? Date.parse(right.createdAt) : Number.NaN;
+    if (Number.isFinite(leftCreated) && Number.isFinite(rightCreated) && leftCreated !== rightCreated) return rightCreated - leftCreated;
+    if (Number.isFinite(leftCreated) !== Number.isFinite(rightCreated)) return Number.isFinite(leftCreated) ? -1 : 1;
+    return left.sessionId < right.sessionId ? -1 : left.sessionId > right.sessionId ? 1 : 0;
+  });
+  return collectionResponse({ total: workspaces.length, workspaces });
 }
 
 export async function getWorkspace(sessionId: string): Promise<WorkspaceMetadata | null> {
@@ -251,13 +421,43 @@ function publicResult(value: unknown): unknown {
   }));
 }
 
+export async function deleteWorkspaceFile(sessionId: string, filename: string): Promise<Response> {
+  const metadata = await getWorkspace(sessionId);
+  if (!metadata) return Response.json({ error: "Workspace not found." }, { status: 404 });
+  if (metadata.status !== "uploading") return Response.json({ error: "Files can only be removed before workflow processing starts." }, { status: 409 });
+  const safeName = safeFilename(filename);
+  if (!safeName || safeName !== filename || !metadata.files.includes(safeName)) return Response.json({ error: "Uploaded file was not found." }, { status: 404 });
+  try {
+    await rm(path.join(workspacePath(sessionId), "uploads", safeName));
+    metadata.files = metadata.files.filter((name) => name !== safeName);
+    await persistWorkspace(metadata);
+    return Response.json({ sessionId, fileCount: metadata.files.length, status: metadata.status });
+  } catch {
+    return Response.json({ error: "Could not remove uploaded file." }, { status: 500 });
+  }
+}
+
+export async function deleteWorkspace(sessionId: string): Promise<Response> {
+  const metadata = await getWorkspace(sessionId);
+  if (!metadata) return Response.json({ error: "Workspace not found." }, { status: 404 });
+  if (activeWorkspaces.has(sessionId) || startingWorkspaces.has(sessionId) || metadata.status === "queued" || metadata.status === "running") {
+    return Response.json({ error: "A workspace cannot be deleted while processing is active." }, { status: 409 });
+  }
+  try {
+    await rm(workspacePath(sessionId), { recursive: true, force: false });
+    return Response.json({ sessionId, deleted: true });
+  } catch {
+    return Response.json({ error: "Could not delete workspace." }, { status: 500 });
+  }
+}
+
 export async function getWorkspaceStatus(sessionId: string): Promise<Response> {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId)) {
     return Response.json({ error: "Invalid workspace session ID." }, { status: 400 });
   }
   let metadata = await getWorkspace(sessionId);
   if (!metadata) return Response.json({ error: "Workspace not found." }, { status: 404 });
-  if ((metadata.status === "queued" || metadata.status === "running") && !activeWorkspaces.has(sessionId)) {
+  if ((metadata.status === "queued" || metadata.status === "running") && effectiveWorkspaceStatus(sessionId, metadata.status) === "failed") {
     metadata = await updateWorkspace(sessionId, {
       status: "failed",
       error: "Workflow was interrupted by an application restart.",
@@ -267,6 +467,7 @@ export async function getWorkspaceStatus(sessionId: string): Promise<Response> {
     sessionId: metadata.sessionId,
     status: metadata.status,
     fileCount: metadata.files.length,
+    files: metadata.files,
     workflowSessionId: metadata.workflowSessionId ?? null,
     result: metadata.status === "completed" ? publicResult(metadata.result) : null,
     error: metadata.status === "failed" ? metadata.error ?? "Workflow processing failed." : null,

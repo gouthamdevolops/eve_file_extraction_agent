@@ -1,8 +1,63 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import UploadWorkspace from "@/components/upload-workspace";
+import CinematicIntro from "@/components/cinematic-intro";
+
+const INTRO_SESSION_KEY = "eve-aircraft-cinematic-intro-seen";
+let introStartedForDocument = false;
 
 export default function DashboardShell() {
+  const [selectionRevealed, setSelectionRevealed] = useState(false);
+  const [introActive, setIntroActive] = useState(false);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    let alreadySeen = false;
+    try { alreadySeen = window.sessionStorage.getItem(INTRO_SESSION_KEY) === "1"; } catch { alreadySeen = false; }
+    const navigationEntry = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    const isReload = navigationEntry?.type === "reload";
+    if (introStartedForDocument || (alreadySeen && !isReload)) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      try { window.sessionStorage.setItem(INTRO_SESSION_KEY, "1"); } catch { /* Storage may be disabled. */ }
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      introStartedForDocument = true;
+      try { window.sessionStorage.setItem(INTRO_SESSION_KEY, "1"); } catch { /* The intro still plays for this visit. */ }
+      setIntroActive(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  function finishIntro() { setIntroActive(false); }
+  function replayIntro() {
+    try { window.sessionStorage.setItem(INTRO_SESSION_KEY, "1"); } catch { /* Storage may be disabled. */ }
+    setIntroActive(true);
+  }
+  function popHeroAction(action: HTMLAnchorElement) {
+    action.classList.remove("is-clicking");
+    void action.offsetWidth;
+    action.classList.add("is-clicking");
+    window.setTimeout(() => action.classList.remove("is-clicking"), 620);
+  }
+  function revealSelection(event: React.MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
+    popHeroAction(event.currentTarget);
+    setSelectionRevealed(true);
+    window.history.replaceState(null, "", "#document-selection");
+    window.setTimeout(() => document.getElementById("document-selection")?.scrollIntoView({ behavior: "smooth", block: "start" }), 140);
+  }
+  function revealWorkflow(event: React.MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
+    popHeroAction(event.currentTarget);
+    window.history.replaceState(null, "", "#workflow-overview");
+    window.setTimeout(() => document.getElementById("workflow-overview")?.scrollIntoView({ behavior: "smooth", block: "start" }), 140);
+  }
   return (
-    <div className="dashboard-shell">
+    <div className={`dashboard-shell${selectionRevealed ? " selection-revealed" : ""}`}>
+      <CinematicIntro active={introActive} onFinish={finishIntro} />
       <div className="aviation-motif" aria-hidden="true">
         <svg viewBox="0 0 1000 760" fill="none" role="presentation">
           <circle cx="760" cy="235" r="92" />
@@ -14,26 +69,32 @@ export default function DashboardShell() {
           <path d="M760 205v60M730 235h60" />
         </svg>
       </div>
-      <header className="app-header">
+      <header className="app-header" inert={introActive}>
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 36 36" role="presentation">
-              <path d="M24 3.5c-1.8 0-3 1.5-3 3.5v13L5 28.5v4l16-4.7v10.6l-5.8 4.1v2.3L24 42.7l8.8 2.1v-2.3L27 38.4V27.8l16 4.7v-4L27 20V7c0-2-1.2-3.5-3-3.5Z" transform="scale(.75)" />
+              <path d="M10 5h11l6 6v20H10zM21 5v7h6M14 18h9M14 22h9M14 26h6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" />
             </svg>
           </span>
           <span className="brand-copy"><strong>Aircraft Document Processing</strong><span>EVE · OPERATIONS</span></span>
         </div>
-        <div className="header-note"><span className="header-dot" /> Local workspace</div>
+        <nav className="gt-main-nav" aria-label="Main navigation"><Link className="gt-nav-link active" href="/">Landing</Link><a className="gt-nav-link" href="#document-selection" onClick={revealSelection}>Workflow start</a><Link className="gt-nav-link" href="/workspaces">Results</Link></nav>
+        <div className="header-tools"><Link className="workspace-history-sr-only" href="/workspaces">Workspace history</Link><div className="header-note"><span className="header-dot" /> Workspace available</div></div>
       </header>
 
-      <main className="dashboard-main">
+      <main className="dashboard-main" inert={introActive}>
         <section className="page-intro" aria-labelledby="page-title">
           <div className="hero-copy">
             <p className="section-kicker"><span className="hero-kicker-mark" aria-hidden="true" /> AIRCRAFT OPERATIONS / DOCUMENT INTAKE</p>
             <h1 className="hero-title" id="page-title">Aircraft document processing</h1>
             <p className="hero-subtitle">Turn aircraft utilization documents into structured operational data. Review every file, upload deliberately, and start processing when your batch is ready.</p>
-            <a className="hero-action" href="#document-selection">Select documents <span aria-hidden="true">↓</span></a>
+            <div className="hero-actions">
+              <a className="hero-action" href="#document-selection" onClick={revealSelection}>Select documents <span aria-hidden="true">↓</span></a>
+              <a className="hero-action hero-action-secondary" href="#workflow-overview" onClick={revealWorkflow}>Explore workflow <span aria-hidden="true">↓</span></a>
+            </div>
+            <button className="replay-intro-button" type="button" onClick={replayIntro}>↻ &nbsp; Replay introduction</button>
           </div>
+          <aside className="hero-caption" aria-label="Application sections"><small>THREE-PAGE APPLICATION</small><strong>Landing · Workflow · Results</strong></aside>
           <div className="hero-visual" aria-hidden="true">
             <svg className="hero-flight-route" viewBox="0 0 360 280" fill="none" role="presentation">
               <path className="route-halo" d="M34 215C86 77 148 242 198 163S273 74 316 54" />
@@ -60,7 +121,7 @@ export default function DashboardShell() {
 
         <UploadWorkspace />
 
-        <section className="workflow-overview" aria-labelledby="workflow-heading">
+        <section id="workflow-overview" className="workflow-overview" aria-labelledby="workflow-heading">
           <div className="overview-heading">
             <div><p className="section-kicker">WORKFLOW</p><h2 id="workflow-heading">A controlled path from file to result</h2></div>
             <p>Uploading and processing stay separate. You decide when the workflow starts.</p>

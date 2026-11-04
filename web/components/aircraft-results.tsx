@@ -59,10 +59,16 @@ function ComponentDetail({ view, family }: { view: ComponentView; family: Aircra
 export default function AircraftResults({ aircraft }: { aircraft: AircraftView[] }) {
   const [activeKey, setActiveKey] = useState(aircraft[0]?.key);
   const [selected, setSelected] = useState<ComponentSlot>("Engine1");
+  const [componentSearch, setComponentSearch] = useState("");
   const current = aircraft.find((item) => item.key === activeKey) ?? aircraft[0];
   if (!current) return null;
 
   const extractedCount = COMPONENT_SLOTS.filter((slot) => ["extracted", "low-confidence"].includes(current.components[slot].health)).length;
+  const query = componentSearch.trim().toLocaleLowerCase();
+  const matchingSlots = COMPONENT_SLOTS.filter((slot) => {
+    const component = current.components[slot];
+    return `${componentLabel(slot, current.family)} ${component.serialNumber ?? ""}`.toLocaleLowerCase().includes(query);
+  });
 
   return (
     <section className="aircraft-results" aria-labelledby="aircraft-heading">
@@ -108,12 +114,16 @@ export default function AircraftResults({ aircraft }: { aircraft: AircraftView[]
         {(["extracted", "low-confidence", "excluded", "not-found"] as const).map((health) => <li key={health}><span className={`legend-swatch health-${health}`} />{healthLabel(health)}</li>)}
       </ul>
 
+      <label className="component-search aircraft-component-search">
+        <span aria-hidden="true">⌕</span>
+        <input type="search" value={componentSearch} onChange={(event) => setComponentSearch(event.currentTarget.value)} placeholder="Find a component or serial number…" aria-label="Find a component or serial number" />
+      </label>
       <div className="component-table-wrap">
         <table className="component-table">
-          <caption>All components · {current.sourceName}</caption>
+          <caption>Component details · {current.sourceName}</caption>
           <thead><tr><th scope="col">Component</th><th scope="col">Serial</th><th scope="col">Status</th><th scope="col">TSN</th><th scope="col">CSN</th><th scope="col">Hrs / mo</th><th scope="col">Cyc / mo</th></tr></thead>
           <tbody>
-            {COMPONENT_SLOTS.map((slot) => {
+            {matchingSlots.map((slot) => {
               const view = current.components[slot];
               return (
                 <tr key={slot} className={slot === selected ? "is-selected" : ""}>
@@ -127,6 +137,7 @@ export default function AircraftResults({ aircraft }: { aircraft: AircraftView[]
                 </tr>
               );
             })}
+            {matchingSlots.length === 0 && <tr><td colSpan={7} className="component-table-empty">No components match this search.</td></tr>}
           </tbody>
         </table>
       </div>

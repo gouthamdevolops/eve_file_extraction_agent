@@ -87,6 +87,36 @@ export default function UploadWorkspace() {
     if (!selectionLocked) addFiles(event.dataTransfer.files);
   }
 
+  function openFilePicker(event: React.MouseEvent<HTMLDivElement>) {
+    if (selectionLocked || (event.target as HTMLElement).closest("label, button, input")) return;
+    filesInput.current?.click();
+  }
+
+  function handleDropzoneKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if ((event.key === "Enter" || event.key === " ") && !selectionLocked) {
+      event.preventDefault();
+      filesInput.current?.click();
+    }
+  }
+
+  function tiltDropzone(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== "mouse" || (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width;
+    const y = (event.clientY - bounds.top) / bounds.height;
+    event.currentTarget.style.setProperty("--tilt-x", `${((0.5 - y) * 3).toFixed(2)}deg`);
+    event.currentTarget.style.setProperty("--tilt-y", `${((x - 0.5) * 3).toFixed(2)}deg`);
+    event.currentTarget.style.setProperty("--pointer-x", `${x * 100}%`);
+    event.currentTarget.style.setProperty("--pointer-y", `${y * 100}%`);
+  }
+
+  function resetDropzoneTilt(event: React.PointerEvent<HTMLDivElement>) {
+    event.currentTarget.style.setProperty("--tilt-x", "0deg");
+    event.currentTarget.style.setProperty("--tilt-y", "0deg");
+    event.currentTarget.style.setProperty("--pointer-x", "50%");
+    event.currentTarget.style.setProperty("--pointer-y", "50%");
+  }
+
   function removeFile(id: number) {
     setFiles((current) => current.filter((item) => item.id !== id));
   }
@@ -136,9 +166,9 @@ export default function UploadWorkspace() {
     <section id="document-selection" className={`selection-panel ${dragging ? "is-dragging" : ""}`} aria-labelledby="selection-title">
       <div className="selection-heading">
         <div>
-          <p className="section-kicker">DOCUMENT BATCH</p>
-          <h2 id="selection-title">Select and review documents</h2>
-          <p className="selection-subtitle">Choose files or a folder, then review the batch before it is uploaded.</p>
+          <p className="section-kicker">DOCUMENT INTAKE</p>
+          <h2 id="selection-title">Upload your aircraft documents</h2>
+          <p className="selection-subtitle">Choose files or a folder, review the batch, then upload when it’s ready.</p>
         </div>
         <div className="selection-heading-actions">
           {recentWorkspace && (
@@ -160,12 +190,12 @@ export default function UploadWorkspace() {
         }}
         onDrop={handleDrop}
       >
-        <div className="dropzone">
+        <div className={`dropzone${dragging ? " dropzone-dragging" : ""}`} onClick={openFilePicker} onKeyDown={handleDropzoneKeyDown} onPointerMove={tiltDropzone} onPointerLeave={resetDropzoneTilt} role="button" tabIndex={selectionLocked ? -1 : 0} aria-label="Upload aircraft documents">
           <span className="dropzone-icon" aria-hidden="true">
-            <svg viewBox="0 0 48 48" fill="none"><path d="M24 3.5c-1.8 0-3 1.5-3 3.5v13L5 28.5v4l16-4.7v10.6l-5.8 4.1v2.3L24 42.7l8.8 2.1v-2.3L27 38.4V27.8l16 4.7v-4L27 20V7c0-2-1.2-3.5-3-3.5Z" /></svg>
+            <svg viewBox="0 0 48 48" fill="none"><path d="M14 31.5a8 8 0 0 1 .8-16A11 11 0 0 1 36 18a7 7 0 0 1-1 13.5H29"/><path d="M24 36V23m0 0-5 5m5-5 5 5"/></svg>
           </span>
-          <strong>Drop documents here</strong>
-          <span className="dropzone-copy">or choose files or a folder from your device</span>
+          <strong className="dropzone-title">{dragging ? "Drop your documents here" : "Drag and drop your files here"}</strong>
+          <span className="dropzone-copy">{dragging ? "Release to add files to your batch" : "or browse your device to select documents"}</span>
           <div className="picker-actions">
             <label className="mock-outline-button">
               <svg className="picker-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 2.5h6l4 4v10a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1Z" /><path d="M11.5 2.5v4h4M7 11h6M7 14h6" /></svg>
@@ -178,6 +208,7 @@ export default function UploadWorkspace() {
               <input ref={(node) => { folderInput.current = node; node?.setAttribute("webkitdirectory", ""); node?.setAttribute("directory", ""); }} type="file" multiple disabled={selectionLocked} onChange={(event) => { addFiles(event.currentTarget.files); event.currentTarget.value = ""; }} />
             </label>
           </div>
+          <small className="dropzone-formats">PDF, Word, Excel, PowerPoint, OpenDocument, and image files · Up to 25 MiB per file</small>
           <small>Multiple folders can be added by choosing each folder in turn.</small>
         </div>
         <aside className="limits-card" aria-label="Upload limits">

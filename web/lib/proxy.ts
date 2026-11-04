@@ -16,6 +16,20 @@ function backendUrl(path: string): URL | null {
   }
 }
 
+export async function proxyWorkspaceCollection(request: Request): Promise<Response> {
+  const incoming = new URL(request.url);
+  const upstream = new URL("/workspace", "http://eve-backend.invalid");
+  for (const key of incoming.searchParams.keys()) {
+    if (key !== "year" && key !== "month") return safeError("Invalid workspace collection query.", 400);
+  }
+  for (const key of ["year", "month"] as const) {
+    const values = incoming.searchParams.getAll(key);
+    if (values.length > 1) return safeError("Invalid workspace collection query.", 400);
+    if (values.length === 1) upstream.searchParams.set(key, values[0]);
+  }
+  return proxyWorkspace(request, `${upstream.pathname}${upstream.search}`);
+}
+
 export async function proxyWorkspace(request: Request, backendPath: string): Promise<Response> {
   const target = backendUrl(backendPath);
   if (!target) return safeError("Eve backend is not configured.", 503);
